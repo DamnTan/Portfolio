@@ -1,0 +1,215 @@
+/*
+Programme to perform huffman compression, a binary tree of frequencies used to compress text files.
+Programme expects ASCII cods '000' NULL to '~' and includes upper and lower case alphabet characters
+Valgrind check indicates free all nodes is succesful.
+*/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define LOFWORD 30
+#define ASCI 127
+#define BYTE 8
+#define ASCISPACE 31
+typedef struct node Node;
+
+struct node {
+  struct node *left;
+  struct node *right;
+  int name;
+  int frequency;
+  int Usedflag;
+};
+
+int compare (const void *a, const void *b);
+int MakeCheckList (int argc, char *argv, int letter[ASCI]);
+Node *allocate_node (void);
+Node *populate_node (char x, int freq, Node *p);
+Node *Find_smallest (Node **List);
+int print_HufCode (Node *List, char Temp[LOFWORD], char searchchar, int currentval);
+void freeall (Node *current);
+void freearray (Node *List[ASCI]);
+
+/*creates array of nodes for characters based on files read from argv. allocates and populates node
+sepparately with info from the makelist function.
+qsorts info in array in decending order of frequency and removes the bottom 2
+item in the array with frequency and an unused 'Usedflag' and inserts a node pointing to the
+2 removed items until only 1 item remains, the parent node. Then searches through the node for
+the asci characteres in ascending asci code and prints them off.
+note on free: as the array loses the bottom item each time a new node is inserted, to prevent
+them being lost freelist keeps track of them so they can be freed at the end of the programme.
+*/
+int main (int argc, char** argv)
+{
+  Node *List[ASCI], *temp, *freelist[ASCI] = {NULL};
+  int letter[ASCI], x, currentval = -1, y = 0, bytes = 0;
+  char hufcode[LOFWORD];
+
+  MakeCheckList(argc, argv[1], letter);
+  for (x = 0 ; x < ASCI ; x++ ) {
+    temp = allocate_node();
+    List[x] = populate_node(x, letter[x], temp);
+  }
+  qsort(List, ASCI , sizeof(Node*), compare);
+  while(List[1]->Usedflag == 1){
+    freelist[y] = List[ASCI - 1];
+    y++;
+    temp = Find_smallest(List);
+    List[ASCI - 1] = temp;
+    qsort(List, ASCI , sizeof(Node*), compare);
+  }
+  for (x = 0 ; x < ASCI ; x++ ) {
+    bytes += print_HufCode(List[0], hufcode, x, currentval);
+  }
+  printf("%d bytes\n", bytes);
+  freearray(List);
+  freearray(freelist);
+  return 1;
+}
+
+/*Creates the list of characters and populates their frequency*/
+int MakeCheckList (int argc, char *argv, int letter[ASCI])
+{
+  FILE *fp;
+  int c, i;
+  if (argc == 2) {
+    if ((fp = fopen(argv, "r")) == NULL) {
+      printf("Failed to open file\n");
+      exit(1);
+    }
+    else {
+      for (i = 0 ; i < ASCI ; i++) {
+        letter[i] = 0;
+      }
+      while ((c = fgetc(fp)) != EOF) {
+        ++letter[c];
+      }
+    fclose(fp);
+    }
+  }
+  else {
+    printf("Please enter a file name\n");
+    exit(2);
+  }
+  return 0;
+}
+
+/*Note: Allocate node was sepparated from populate node so it could be reused for creating
+root nodes for the tree arrray as well as the initial allocations*/
+Node *allocate_node (void)
+{
+  Node *p;
+  p = (Node*)calloc(1, sizeof(Node));
+  if (p == NULL) {
+    printf("cannot allocate node");
+    exit(0);
+  }
+  return p;
+}
+
+Node *populate_node (char x, int freq, Node *p)
+{
+  p->name = x;
+  p->frequency = freq;
+  p->Usedflag = 1;
+  return p;
+}
+
+/*Compare function for use in the qsort, sorts in decending order of frequency*/
+int compare (const void *a, const void *b)
+{
+  Node *x = *(Node *const*)a;
+  Node *y = *(Node *const*)b;
+  if (x->frequency == 0 && y->frequency == 0) {
+    return 0;
+  }
+  if (y->frequency == 0  && x->frequency  == !0 ) {
+    return -1;
+  }
+  if (x->frequency == 0 && y->frequency != 0 ){
+    return 1;
+  }
+  return (y->frequency - x->frequency);
+}
+/*searches the list from the bottom to the top looking for nodes with !0 frequency and
+a !0 used flag. creates a node points towards bottom two items. sets bottom 2 items
+used flag as 0 and sets the new nodes frequency as = to the root nodes total frequency */
+Node *Find_smallest (Node **List)
+{
+  int x = ASCI;
+  Node *p = NULL;
+  for (x = ASCI - 1 ; x > 0 ; x--){
+    if (List[x]->frequency > 0 && List[x]->Usedflag == 1) {
+      if ( x > 0 ) {
+        p = allocate_node();
+        p->frequency = (List[x]->frequency + List[x - 1]->frequency);
+        p->left = List[x];
+        p->right = List[x - 1];
+        p->Usedflag = 1;
+        List[x]->Usedflag = 0;
+        List[x - 1]->Usedflag = 0;
+        return p;
+      }
+    }
+  }
+  return p;
+}
+
+/*recursive search function to look through the list and find the search term whilst building
+the huffamn code, excpetions are for non-printable characters such as enter and NULL,
+returns the number of bites used to estimate the size of the compression */
+int print_HufCode (Node *List, char Temp[LOFWORD], char searchchar, int currentval)
+{
+  Node *current;
+  int length, bytes = 0;
+  current = List;
+  currentval++;
+  if (current == NULL) {
+    return 0;
+  }
+    if (current->name == searchchar ) {
+      if (searchchar <= ASCISPACE && searchchar != 0){
+        Temp[currentval] = '\0';
+        length = strlen(Temp);
+        printf("'%d' %s, (  %d * %d )\n", current->name, Temp, length, current->frequency);
+        if ((length / BYTE) != 0 ){
+          return length / BYTE + 1;
+        }
+        else {
+          return length % BYTE;
+        }
+      }
+      else if (searchchar != 0) {
+        Temp[currentval] = '\0';
+        length = strlen(Temp);
+        printf("'%c' %s, (  %d * %d )\n", current->name, Temp, length, current->frequency);
+        bytes += length;
+        if ((length % BYTE) != 0 ){
+          return length / BYTE + 1;
+        }
+        else {
+          return length / BYTE;
+        }
+      }
+    }
+    else {
+      Temp[currentval] = '0';
+      bytes += print_HufCode(current->left, Temp, searchchar, currentval);
+      Temp[currentval] = '1';
+      bytes += print_HufCode(current->right, Temp, searchchar, currentval);
+      }
+  return bytes;
+}
+
+void freearray (Node *List[ASCI])
+{
+  int x = 0;
+  for (x = 0 ; x < ASCI ; x ++) {
+    if (List[x] != NULL) {
+      free(List[x]);
+    }
+  }
+  return;
+}
