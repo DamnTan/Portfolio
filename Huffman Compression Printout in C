@@ -1,0 +1,349 @@
+/*
+Programme to print off a Huffman tree. In can be used to print off any binary tree.
+
+Programme adds sufficient space to ensure that there are no collisions by counting the number
+of nodes to the left and right and using those ammounts to space out nodes. Nodes with the
+least efficient spacing should not collide (eg. hufcode 1000000000 and hucode 0111111111)
+
+Programme accepts only asci characters from 'A' to 'Z' and assumes lowercase and higher case are
+the same character.
+
+Mallocs the array to display the tree relative to the number of items being stored.
+*/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define LOFWORD 30
+#define ASCI 127
+#define ARRAY 108
+#define DISTANCEMOD 3
+
+typedef struct node Node;
+
+struct node {
+  struct node *left;
+  struct node *right;
+  int name;
+  int frequency;
+  int Usedflag;
+  struct node *parent;
+  int Lchildren;
+  int Rchildren;
+};
+
+int compare (const void *a, const void *b);
+int Makelist (int argc, char *argv, int letter[ASCI]);
+Node *allocate_node (void);
+Node *populate_node (char x, int freq, Node *p);
+Node *Find_smallest (Node **List);
+void print_HufCode (Node *List, char Temp[LOFWORD], char searchchar, int currentval);
+void populate_parent (Node *root[ASCI]);
+void make_tree (Node *start, char **treearray, int x, int y);
+char **Mallocarray (int items);
+void fillarray (char **treearray, int items);
+void print_tree (char **treearray, int items);
+void freeNode (Node *List[ASCI]);
+void freearray (char **array, int items);
+void Freeall (Node *List[ASCI], Node *freelist[ASCI], char **array, int items);
+
+/*Creates List charater frequencies and turns them into Nodes and inserts them
+into list of arrays. Then checks if it is a letter.
+
+It then counts the number of children each node has to work out the number of lines
+between each node to draw without collision.
+
+Uses the huffman code to create to draw the diagram into an array to the correct size
+ */
+int main (int argc, char** argv)
+{
+  Node *List[ASCI], *rootlist[ASCI], *temp, *freelist[ASCI] = {NULL};
+  int letter[ASCI], x, currentval = -1, y = 0, items = 0;
+  char hufcode[LOFWORD], **treearray;
+  Makelist(argc, argv[1], letter);
+  for (x = 0 ; x < ASCI ; x++ ) {
+    temp = allocate_node();
+    rootlist[x] = List[x] = populate_node(x, letter[x], temp);
+    if (isalpha(List[x]->name) == 0) {
+      List[x]->frequency = 0;
+      items++;
+    }
+  }
+  qsort(List, ASCI , sizeof(Node*), compare);
+  while(List[1]->Usedflag == 1){
+    freelist[y] = List[ASCI - 1];
+    y++;
+    temp = Find_smallest(List);
+    List[ASCI - 1] = temp;
+    qsort(List, ASCI , sizeof(Node*), compare);
+  }
+  print_HufCode(List[0], hufcode, x, currentval);
+  populate_parent(rootlist);
+  treearray = Mallocarray(items);
+  fillarray(treearray, items);
+  make_tree(List[0], treearray, 0, 0);
+  print_tree(treearray, items);
+  Freeall(List, freelist, treearray, items);
+  return 0;
+}
+
+/*Makes list and checks argv and argc for file name a number of arguments*/
+int Makelist (int argc, char *argv, int letter[ASCI])
+{
+  FILE *fp;
+  int c, i;
+  if (argc == 2) {
+    if ((fp = fopen(argv, "r")) == NULL) {
+      printf("Failed to open file\n");
+      exit(1);
+    }
+    else {
+      for (i = 0 ; i < ASCI ; i++) {
+        letter[i] = 0;
+      }
+      while ((c = fgetc(fp)) != EOF) {
+        ++letter[ toupper(c) ];
+      }
+      fclose(fp);
+    }
+  }
+  else {
+    printf("Please input file name\n");
+    exit(2);
+  }
+  return 0;
+}
+/*Creates all nodes and sets left and right chilren as 1 for purpose of counting
+the number of children each has*/
+Node *allocate_node (void)
+{
+  Node *p;
+  p = (Node*)calloc(1, sizeof(Node));
+  if (p == NULL) {
+    printf("Cannot allocate node!");
+    exit(0);
+  }
+  p->Lchildren = 1;
+  p->Rchildren = 1;
+
+  return p;
+}
+/*populates Nodes with inforamtion about frequencey, Usedflag and setting pointers to NULL*/
+Node *populate_node (char x, int freq, Node *p)
+{
+  p->name = x;
+  p->frequency = freq;
+  p->Usedflag = 1;
+  p->left = NULL;
+  p->right = NULL;
+  p->parent = NULL;
+  return p;
+}
+/*Used in the Qsort, sorts into decending order from array index [0] */
+int compare (const void *a, const void *b)
+{
+  Node *x = *(Node *const*)a;
+  Node *y = *(Node *const*)b;
+  if (x->frequency == 0 && y->frequency == 0) {
+    return 0;
+  }
+  if (y->frequency == 0  && x->frequency  == !0 ) {
+    return -1;
+  }
+  if (x->frequency == 0 && y->frequency != 0 ){
+    return 1;
+  }
+  return (y->frequency - x->frequency);
+}
+
+/*Finds the smallest non zero value in the list. creates a new node and points
+Left and Right the two smalles items in the list, and sets their as parent.*/
+Node *Find_smallest (Node **List)
+{
+  int x = ASCI;
+  Node *p = NULL;
+  for (x = ASCI - 1 ; x > 0 ; x--){
+    if (List[x]->frequency > 0 && List[x]->Usedflag == 1) {
+      if ( x > 0 ) {
+        p = allocate_node();
+        p->frequency = (List[x]->frequency + List[x - 1]->frequency);
+        p->left = List[x];
+        p->right = List[x - 1];
+        p->Usedflag = 1;
+        List[x]->Usedflag = 0;
+        List[x - 1]->Usedflag = 0;
+        List[x]->parent = p;
+        List[x - 1]->parent = p;
+        return p;
+      }
+    }
+  }
+  return p;
+}
+
+/*Recursive function that generates a huffman code from the location in the tree.
+enters the code into an array.
+*/
+void print_HufCode (Node *List, char Temp[LOFWORD], char searchchar, int currentval)
+{
+  Node *current;
+  current = List;
+  currentval++;
+  if (current == NULL) {
+    return;
+  }
+  if (current->name == searchchar ) {
+    if (searchchar == 0){
+      return;
+    }
+    Temp[currentval] = '\0';
+  }
+  else {
+    Temp[currentval] = '0';
+    print_HufCode(current->left, Temp, searchchar, currentval);
+    Temp[currentval] = '1';
+    print_HufCode(current->right, Temp, searchchar, currentval);
+  }
+  return;
+}
+/*calculates the number of children each parent has. by going through each item in the
+root array and working up to its parenet and finding the number of children each one has */
+void populate_parent (Node *root[ASCI])
+{
+  int x;
+  Node *current, *temp;
+  for (x = 0 ; x < ASCI ; x++) {
+    current = temp = root[x];
+    current = current->parent;
+    while (current != NULL){
+      if (current->left == temp) {
+        current->Lchildren = (temp->Lchildren + temp->Rchildren);
+      }
+      if (current->right == temp) {
+        current->Rchildren = (temp->Lchildren + temp->Rchildren);
+      }
+      temp = current;
+      current = current->parent;
+    }
+  }
+  return;
+}
+/*Sets the array by lookung through the nodes and printing each node recursively
+from parent to children.
+Uses the number of left and right children to calculate the distance between each
+parent and child and modifies a printable length.
+
+Each recursion takes a node in the array and its location in the array for printing.
+if the array passed to the funtion contains no children (L/Rchildren == 1), it prints of the
+character.
+*/
+void make_tree (Node *start, char **treearray, int x, int y)
+{
+  int tempx = x, tempy = y, x1, y1, x2, y2;
+  Node *current = start;
+  treearray[x][y] = '#';
+    if (current->left == NULL || current->right == NULL ) {
+      treearray[tempx][y] = current->name;
+    }
+  if (current->left != NULL) {
+    while (current->Lchildren/DISTANCEMOD + 1 > tempx - x) {
+      tempx++;
+      treearray[tempx][y] = '|';
+    }
+    x1 = tempx;
+    y1 = y;
+    make_tree(current->left, treearray, x1, y1);
+  }
+  if (current->right != NULL) {
+    while (current->Rchildren/DISTANCEMOD + 1 > tempy - y){
+      tempy++;
+      treearray[x][tempy] = '_';
+    }
+    x2 = x;
+    y2 = tempy;
+    make_tree(current->right, treearray, x2, y2);
+  }
+  return;
+}
+/*Prints of the contents of the array. As soon as it prints an empty line it stops to
+prevent over filling the screen */
+void print_tree (char **treearray, int items)
+{
+  int x, y, z = 0;
+  printf("\n");
+  for (x = 0 ; x < items ; x++ ) {
+    for (y = 0 ; y < items ; y++) {
+      printf("%c", treearray[x][y]);
+      if (treearray[x][y] != ' '){
+        z++;
+      }
+
+    }
+    if (z == 0) {
+      printf("\n");
+      return;
+    }
+    z = 0;
+    printf("\n");
+  }
+  return;
+}
+
+/*sets array characters as Space. */
+void fillarray (char **treearray, int items)
+{
+  int x, y;
+  for (x = 0 ; x < items ; x++ ) {
+    for (y = 0 ; y < items ; y++) {
+      treearray[x][y] = ' ';
+    }
+  }
+  return;
+}
+
+char **Mallocarray (int items)
+{
+  int x, y;
+  char **p = (char**)calloc(items*items, sizeof(char*));
+  for (x = 0 ; x < items ; x++) {
+    for ( y = 0 ; y < items ; y++){
+    p[x] = (char*)calloc(items, sizeof(char));
+    }
+  }
+  if (p == NULL) {
+    printf("cannot allocate array");
+    exit(0);
+  }
+  return p;
+}
+
+/*frees all malloced arrays and nodes */
+void Freeall (Node *List[ASCI], Node *freelist[ASCI], char **array, int items)
+{
+  freeNode(List);
+  freeNode(freelist);
+  freearray(array, items);
+  return;
+}
+
+void freeNode (Node *List[ASCI])
+{
+  int x = 0;
+  for (x = 0 ; x < ASCI ; x ++) {
+    if (List[x] != NULL) {
+      free(List[x]);
+    }
+  }
+  return;
+}
+void freearray (char **array, int items)
+{
+  int x;
+  for (x = items ; x >= 0 ; x--) {
+      free(array[x]);
+  }
+  free(array);
+  return;
+}
