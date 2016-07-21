@@ -1,0 +1,230 @@
+/*Programme to find a word ladder beetween two words and returns each step of the
+wordladder. Scans a file to create a linked list of words stored in a struct.
+Programme makes no assumptions about word length of words in the file through malloc.*/
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <ctype.h>
+
+#define LOFWORD 50
+
+struct node {
+  char *name;
+  struct node *parent;
+  int depth;
+  struct node *next;
+};
+
+typedef struct node Node;
+
+Node *fopen_make_list (char *argv);
+Node *allocate_node (char *sourceWord);
+Node *sourceTargetScan (char *targetWord, char *sourceWord);
+int get_edit_distance (char *sourceWord, char *targetWord);
+void mark_ed_disX (Node *test, char *target, Node *Parent, int Depth);
+void print_parents (Node *final);
+int countwords (char *argv);
+void FreeAll (Node *start, Node *targetWord);
+int checkAlpha (char *test);
+
+
+/*Checks input arguments and opens files. Returns edit distance. Sets first load of words
+with ed distance 1 and then resends found words to second run of function when the target
+word containing a !0 word depth is found the programme returns the target word
+and prints the list of parents */
+int main (int argc, char** argv)
+{
+  char sourceWord[LOFWORD], targetWord[LOFWORD];
+  Node *start = NULL, *current = NULL, *current2 = NULL, *sourceNode = NULL;
+  int x = 1, NumberOfWords;
+  if (argc == 2){
+    start = fopen_make_list(argv[1]);
+    NumberOfWords = countwords(argv[1]);
+    sourceNode = sourceTargetScan(sourceWord, targetWord);
+    for (current = start ; current -> next != NULL ; current = current -> next ){
+      mark_ed_disX(current, sourceWord, sourceNode, 1);
+    }
+    for (x = 1 ; x < NumberOfWords ; x++){
+      for (current = start ; current -> next != NULL ; current = current -> next ){
+        if (current -> depth == x){
+          for (current2 = start ; current2 -> next != NULL ; current2 = current2 -> next ){
+            mark_ed_disX(current2, current -> name, current, x + 1);
+            if ((current2 -> depth != 0) && (strcmp(targetWord, current2 -> name) == 0)){
+              print_parents(current2);
+              FreeAll(start, sourceNode);
+              return 1;
+            }
+          }
+        }
+      }
+    }
+    printf("No Solution\n");
+  }
+  FreeAll(start, sourceNode);
+  return 0;
+}
+/*checks a given word with a target word to see if it has an edit distance of 1
+and if not, sets the parent and depth of the word*/
+void mark_ed_disX (Node *test, char *target, Node *Parent, int Depth)
+{
+  if (test -> depth == 0){
+    if ((get_edit_distance(test -> name, target) == 1)){
+      test -> depth = Depth;
+      test -> parent = Parent;
+    }
+  }
+}
+/*Mallocs a Node and char* of the word being put in and sets all struct variables
+to null or 0. */
+Node *allocate_node (char *sourceWord)
+{
+  Node *p;
+  int len;
+  p = (Node*)malloc(sizeof(Node));
+
+  if (p == NULL) {
+    printf("cannot assign node");
+    exit(0);
+  }
+  len = strlen(sourceWord);
+  p -> name = (char*)malloc(1 + (len * (sizeof(char))));
+  strcpy(p -> name, sourceWord);
+  p -> next = NULL;
+  p -> parent = NULL;
+  p -> depth = 0;
+  return p;
+}
+/*Prompts the user for a target and source word and then creates a node
+of the target word to search for. source and target word are reversed to
+print the list in the correct order without requiring an additonal function*/
+Node *sourceTargetScan (char *targetWord, char *sourceWord)
+{
+  char tempSourceWord[LOFWORD], tempTargetWord[LOFWORD];
+  printf("Please enter Source word: ");
+  if (scanf("%s", tempSourceWord) == 1) {
+    strcpy(sourceWord, tempSourceWord);
+  }
+  printf("Please enter Target word: ");
+  if (scanf("%s", tempTargetWord) == 1) {
+    strcpy(targetWord, tempTargetWord);
+  }
+  if(strlen(tempSourceWord) != strlen(tempTargetWord)) {
+    printf("Words entered are not the same Length. Please try again\n");
+    exit(0);
+  }
+  else {
+    printf("Edit distance: %d\n", get_edit_distance(targetWord, sourceWord));
+    return allocate_node(targetWord);
+  }
+}
+
+/*Finds the edit distance of a word and checks the length of it. if words are
+same length it return the edit distance, if not returns edit distacen +1 per
+additonal letter*/
+int get_edit_distance (char sourceWord[LOFWORD], char targetWord[LOFWORD])
+{
+  int sourceLength, targetLength, x, ed_dis = 0;
+  sourceLength = strlen(sourceWord);
+  targetLength = strlen(targetWord);
+  if (sourceLength != targetLength) {
+    return 0;
+  }
+  for( x = 0 ; x < sourceLength ; x++){
+    if (tolower(sourceWord[x]) != tolower(targetWord[x])){
+      ed_dis++;
+    }
+  }
+  return ed_dis;
+}
+
+
+/*prints parents: fflush(stdout) fixed an occasional segfault from printing without
+\n at end of each print statement*/
+void print_parents (Node *final)
+{
+  printf("\n%s", final -> name );
+  while (final -> parent != NULL){
+    fflush(stdout);
+    final = final -> parent;
+    printf(" -> %s", final -> name);
+  }
+  printf("\n");
+}
+
+/*counts the number of words in the file so main can loop through
+correct number of words, scanf was choosen over getchar as it could
+more accurately find the end of the word in the event that words were not
+sepparated by '\n' */
+int countwords (char *argv)
+{
+  FILE *fp;
+  int y = 0;
+  char c[LOFWORD];
+  if ((fp = fopen(argv, "r")) == NULL) {
+    printf("Failed to open file");
+    exit(0);
+  }
+  while (fscanf(fp, "%s", c) != EOF) {
+      y++;
+    }
+  printf("%d words read\n", y);
+  fclose(fp);
+  return y;
+}
+
+/*Opens file and creates linked list of words. each entry points to next items
+created */
+Node *fopen_make_list (char *argv)
+{
+  FILE *fp;
+  Node *temp = NULL, *start = NULL, *current;
+  char tempword[LOFWORD];
+  if ((fp = fopen(argv, "r")) == NULL) {
+    printf("Failed to open file");
+    return 0;
+  }
+  while (fscanf(fp, "%s", tempword) != EOF) {
+    if (checkAlpha(tempword) == 1){
+      if (start == NULL ) {
+        start = current = allocate_node(tempword);
+      }
+      else {
+        temp = allocate_node(tempword);
+        temp -> next = current -> next;
+        current -> next = temp;
+        current = current -> next;
+      }
+    }
+  }
+fclose(fp);
+return start;
+}
+
+/*Frees linked list, names and sourceword*/
+void FreeAll (Node *start, Node *sourceword)
+{
+  Node *temp;
+  while (start -> next != NULL){
+    free(start -> name);
+    temp = start;
+    start = start -> next;
+    free(temp);
+  }
+  free(sourceword);
+}
+
+/*checks words being scanned in for non-alphabet characters */
+int checkAlpha (char *test)
+{
+  int x = 0, y;
+  y = strlen(test);
+  while (x < y) {
+    if ((isalpha(test[x]) != 0)) {
+      x++;
+    }
+    else {
+      return 0;
+    }
+  }
+  return 1;
+}
