@@ -1,7 +1,7 @@
 /*
 Programme to perform huffman compression, a binary tree of frequencies used to compress text files.
-Programme expects ASCII cods '000' NULL to '~' and includes upper and lower case alphabet characters
-Valgrind check indicates free all nodes is succesful.
+Programme expects ASCII codes '000' NULL to '~' and includes upper and lower case alphabet characters
+Valgrind testing indicates free all nodes is succesful and no memory leaks.
 */
 
 #include <stdio.h>
